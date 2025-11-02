@@ -11,28 +11,23 @@ from model import Issue, Event
 
 class TopUserActivityAnalyser:
     """
-    Feature: Top Users Activity (R1)
+    Feature: Top Users Activity
 
+    Analyze  GitHub contributors' activity levels based on issues opened,
+    issues closed, and comments made. Ranks contributors by a combined activity score.
+    
     Total Activity Score per contributor =
         (# issues opened) + (# issues closed) + (# comments made)
 
     Data sources:
       - ISSUE.creator_login (or creator/user.login)  -> opened
       - EVENT.actor_login where event_type in {'closed','commented'} -> closed/commented
-
-    Notes:
-      * If your dataset lacks per-event actors, you can optionally
-        credit the creator for 'closed' issues (toggle in run()).
     """
 
     def __init__(self) -> None:
+        """Initialize configuration, data loader, and issue list."""
         config._init_config()
         self.issues: List[Issue] = DataLoader().get_issues()
-        # If your DataLoader exposes events separately, uncomment:
-        # self.events: List[Event] = DataLoader().get_events()
-        # Otherwise we’ll look for per-issue events via issue.events
-
-    # ----------------------------- PUBLIC API -----------------------------
 
     def run(self,
             top_n: int = 5,
@@ -61,8 +56,7 @@ class TopUserActivityAnalyser:
         # Visual
         self._plot_top_users(top_df, title=f"Top {len(top_df)} Active Contributors")
 
-    # -------------------------- CORE COMPUTATION --------------------------
-
+    
     def _compute_activity_dataframe(
         self, credit_creator_when_closed_unknown: bool
     ) -> pd.DataFrame:
@@ -95,8 +89,6 @@ class TopUserActivityAnalyser:
                     elif etype == "commented":
                         commented[actor] += 1
             else:
-                # If we don't have event actors but the issue is closed,
-                # you may credit the creator (optional – controlled by flag).
                 if credit_creator_when_closed_unknown and self._issue_state(iss) == "closed":
                     creator = self._issue_creator(iss)
                     if creator:
@@ -120,11 +112,9 @@ class TopUserActivityAnalyser:
 
         return pd.DataFrame(rows)
 
-    # ------------------------------ PLOTTING ------------------------------
-
     def _plot_top_users(self, top_df: pd.DataFrame, title: str) -> None:
         """
-        Draw bar chart with badges and compact breakdown for each user.
+        Bar chart without badges. Shows total score and a compact (o/c/cm) breakdown above each bar.
         """
         if top_df.empty:
             print("No data to plot.")
@@ -136,28 +126,31 @@ class TopUserActivityAnalyser:
         closed = top_df["closed"].tolist()
         commented = top_df["commented"].tolist()
 
-        badges = ["🥇", "🥈", "🥉", "⭐", "⭐"]
-
         plt.figure(figsize=(9, 5))
         bars = plt.bar(users, scores)
-        plt.title(f"🏆 {title}\n(opened + closed + commented)")
+
+        plt.title(f"{title}\n(opened + closed + commented)")
         plt.xlabel("Contributor")
         plt.ylabel("Total Activity Score")
 
         y_off = max(scores) * 0.03 if scores else 0.5
+
         for i, bar in enumerate(bars):
-            # choose badge in range
-            badge = badges[i] if i < len(badges) else "⭐"
-            label = f"{badge} {int(scores[i])} (o:{int(opened[i])} c:{int(closed[i])} cm:{int(commented[i])})"
-            plt.text(bar.get_x() + bar.get_width()/2,
-                     bar.get_height() + y_off,
-                     label, ha="center", va="bottom", fontsize=9)
+            label = f"{int(scores[i])} (o:{int(opened[i])} c:{int(closed[i])} cm:{int(commented[i])})"
+            plt.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + y_off,
+                label,
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
 
         plt.tight_layout()
         plt.show()
 
-    # ----------------------------- NORMALIZERS -----------------------------
 
+# -- Helper methods to tolerate schema differences --
     @staticmethod
     def _issue_creator(issue: Issue) -> str | None:
         """
@@ -204,5 +197,4 @@ class TopUserActivityAnalyser:
 
 
 if __name__ == "__main__":
-    # Local quick run (optional):
     TopUserActivityAnalyser().run()
